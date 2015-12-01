@@ -1,6 +1,8 @@
 #ifndef PUMP_H
 #define PUMP_H
 
+#include <Arduino.h>
+
 typedef struct {
   uint8_t pin;
 } pump_t;

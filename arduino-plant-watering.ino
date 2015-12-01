@@ -16,7 +16,7 @@
 #define TIME_BETWEEN_WATERING 10000
 #define WATER_TIME 5000
 
-#define DEBUG 0
+#define DEBUG 1
 
 volatile schedule_t scheduler;
 volatile toggle_switch_t button;
@@ -43,11 +43,11 @@ void setup() {
 
   debounce_init(&button_debounce);
   debounce_init(&float_switch_debounce);
-  toggle_switch_init(&button, OFF_SWITCH);
-  toggle_switch_init(&float_switch, FLOAT_SWITCH_PIN);
+  toggle_switch_init((toggle_switch_t*)&button, OFF_SWITCH, 1);
+  toggle_switch_init((toggle_switch_t*)&float_switch, FLOAT_SWITCH_PIN);
 
   pump_init(&pump, RELAY_PIN);
-  water_schedule_init(&schedule);
+  water_schedule_init((schedule_t*)&scheduler);
 
   /* if toggle switch is in ON position at startup ... */
   if (toggle_switch_on(&button) && toggle_switch_on(&float_switch)) {
@@ -58,15 +58,38 @@ void setup() {
 }
 
 void handleToggleButton() {
-
-  if (debounce_toggle_switch(&button, &button_debounce, 10000)) {
+#ifdef DEBUG
+  Serial.print("[");
+  Serial.print(millis());
+  Serial.print("] ");
+  Serial.println("handleToggleButton");
+#endif
+  if (debounce_toggle_switch(&button, &button_debounce, 1)) {
+#ifdef DEBUG
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print("] ");
+    Serial.println("handleToggleButton debounced ok");
+#endif
     toggle_switch_read_state(&button);
 
     if (toggle_switch_on(&button)) {
+#ifdef DEBUG
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print("] ");
+    Serial.println("handleToggleButton is ON");
+#endif
       if (toggle_switch_on(&float_switch)) {
         startSchedule();
       }
     } else {
+#ifdef DEBUG
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print("] ");
+    Serial.println("handleToggleButton is OFF");
+#endif
       stopSchedule();
     }
   }
@@ -74,35 +97,66 @@ void handleToggleButton() {
 
 void handleFloatSwitch() {
 
-  if (debounce_toggle_switch(&float_switch, &float_switch_debounce, 10000)) {
+#ifdef DEBUG
+  Serial.print("[");
+  Serial.print(millis());
+  Serial.print("] ");
+  Serial.println("handleFloatSwitch");
+#endif
+
+  if (debounce_toggle_switch(&float_switch, &float_switch_debounce, 1)) {
+#ifdef DEBUG
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print("] ");
+    Serial.println("handleFloatSwitch debounced ok");
+#endif
     toggle_switch_read_state(&float_switch);
 
     if (toggle_switch_on(&float_switch)) {
+#ifdef DEBUG
+      Serial.print("[");
+      Serial.print(millis());
+      Serial.print("] ");
+      Serial.println("handleFloatSwitch is ON");
+#endif
       if (toggle_switch_on(&button)) {
         startSchedule();
       }
     } else {
+#ifdef DEBUG
+      Serial.print("[");
+      Serial.print(millis());
+      Serial.print("] ");
+      Serial.println("handleFloatSwitch is OFF");
+#endif
       stopSchedule();
     }
   }
 }
 
 void startSchedule() {
-  water_schedule_start(&schedule);
+  water_schedule_start(&scheduler);
   turnLedOn(OFF_SWITCH_LED_PIN);
   Serial.println("Starting schedule");
 }
 
 void stopSchedule() {
-  water_schedule_stop(&schedule);
+  water_schedule_stop(&scheduler);
   turnLedOff(OFF_SWITCH_LED_PIN);
   Serial.println("Stopping schedule.");
 }
 
 void loop() {
 
-  if (!water_schedule_active(&schedule)) {
-    waitForCondition(&schedule->state, HIGH);
+  if (!water_schedule_active(&scheduler)) {
+#ifdef DEBUG
+    Serial.print("[");
+    Serial.print(millis());
+    Serial.print("] ");
+    Serial.println("Waiting for scheduler to become active");
+#endif
+    waitForCondition(&(scheduler.state), HIGH);
   }
 
 #ifdef DEBUG
@@ -124,7 +178,7 @@ void loop() {
   Serial.println(" ms or until button is switched OFF");
 #endif
 
-  busyWaitOrCondition(WATER_TIME, &schedule->state, LOW);
+  busyWaitOrCondition(WATER_TIME, &(scheduler.state), LOW);
 
   pump_stop(&pump);
   turnLedOff(PUMP_LED_PIN);
@@ -137,7 +191,7 @@ void loop() {
 #endif
 
   /* check state once again, as it may have been turned off by the switch */
-  if (!water_schedule_active(&schedule)) {
+  if (!water_schedule_active(&scheduler)) {
     return;
   }
 
@@ -151,7 +205,7 @@ void loop() {
 #endif
 
   turnLedOn(WAIT_LED_PIN);
-  busyWaitOrCondition(TIME_BETWEEN_WATERING, &schedule->state, LOW);
+  busyWaitOrCondition(TIME_BETWEEN_WATERING, &(scheduler.state), LOW);
   turnLedOff(WAIT_LED_PIN);
 
 #ifdef DEBUG
