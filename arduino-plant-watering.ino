@@ -1,16 +1,25 @@
-#include "pump.h"
 #include "toggle_switch.h"
-#include "scheduler.h"
 #include "debounce.h"
 #include "busy_wait.h"
 
+#define BIT_IS_SET(x, n) ((x) & (1<<(n)))
+#define BIT_SET(x, n)    ((x) |= (1<<(n)))
+#define BIT_UNSET(x, n)  ((x) &= ~(1<<(n)))
+#define BIT_TOGGLE(x, n) ((x) ^= (1<<(n)))
+
+#define RELAY_BIT_POS 0
+#define TOGGLE_SWITCH_BIT_POS 1
+#define FLOAT_SWITCH_BIT_POS 2
+
+/* Input/Output pins */
 #define RELAY_PIN 4
 #define OFF_SWITCH 3
 #define FLOAT_SWITCH_PIN 2
 
+/* LEDs */
 #define OFF_SWITCH_LED_PIN 5
-#define PUMP_LED_PIN 6
-#define WAIT_LED_PIN 7
+#define FLOAT_SWITCH_LED_PIN 6
+#define PUMP_LED_PIN 7
 
 /* watering schedule */
 #define TIME_BETWEEN_WATERING 10000
@@ -18,19 +27,21 @@
 
 #define DEBUG 1
 
-volatile schedule_t scheduler;
+volatile uint8_t state_mask;
+
 volatile toggle_switch_t button;
 volatile toggle_switch_t float_switch;
 debounce_t button_debounce;
 debounce_t float_switch_debounce;
-pump_t pump;
+
+unsigned long pump_state_msec;
 
 void setup() {
   Serial.begin(9600);
   pinMode(RELAY_PIN, OUTPUT);
   pinMode(OFF_SWITCH_LED_PIN, OUTPUT);
   pinMode(PUMP_LED_PIN, OUTPUT);
-  pinMode(WAIT_LED_PIN, OUTPUT);
+  pinMode(FLOAT_SWITCH_LED_PIN, OUTPUT);
 
   /* pullup the toggle switch to 10k internal resistor */
   pinMode(OFF_SWITCH, INPUT_PULLUP);
@@ -46,188 +57,74 @@ void setup() {
   toggle_switch_init((toggle_switch_t*)&button, OFF_SWITCH, 1);
   toggle_switch_init((toggle_switch_t*)&float_switch, FLOAT_SWITCH_PIN);
 
-  pump_init(&pump, RELAY_PIN);
-  water_schedule_init((schedule_t*)&scheduler);
+  pump_state_msec = 0;
 
   /* if toggle switch is in ON position at startup ... */
-  if (toggle_switch_on(&button) && toggle_switch_on(&float_switch)) {
-    startSchedule();
+  if (toggle_switch_on(&button)) {
+    BIT_SET(state_mask, TOGGLE_SWITCH_BIT_POS);
+  }
+
+  if (toggle_switch_on(&float_switch)) {
+    BIT_SET(state_mask, FLOAT_SWITCH_BIT_POS);
   }
 
   delay(1000);
 }
 
 void handleToggleButton() {
-#ifdef DEBUG
-  Serial.print("[");
-  Serial.print(micros());
-  Serial.print("] ");
-  Serial.println("handleToggleButton");
-#endif
-  if (debounce_toggle_switch(&button, &button_debounce, 10)) {
-#ifdef DEBUG
-    Serial.print("[");
-    Serial.print(micros());
-    Serial.print("] ");
-    Serial.println("handleToggleButton debounced ok");
-#endif
+  if (debounce_toggle_switch(&button, &button_debounce, 2)) {
     toggle_switch_read_state(&button);
 
     if (toggle_switch_on(&button)) {
-#ifdef DEBUG
-    Serial.print("[");
-    Serial.print(millis());
-    Serial.print("] ");
-    Serial.println("handleToggleButton is ON");
-#endif
-      if (toggle_switch_on(&float_switch)) {
-        startSchedule();
-      }
+      BIT_SET(state_mask, TOGGLE_SWITCH_BIT_POS);
     } else {
-#ifdef DEBUG
-    Serial.print("[");
-    Serial.print(millis());
-    Serial.print("] ");
-    Serial.println("handleToggleButton is OFF");
-#endif
-      stopSchedule();
+      BIT_UNSET(state_mask, TOGGLE_SWITCH_BIT_POS);
     }
-  } else {
-#ifdef DEBUG
-    Serial.print("[");
-    Serial.print(micros());
-    Serial.print("] ");
-    Serial.println("handleToggleButton debounced NOT ok");
-#endif
   }
 }
 
 void handleFloatSwitch() {
-
-#ifdef DEBUG
-  Serial.print("[");
-  Serial.print(micros());
-  Serial.print("] ");
-  Serial.println("handleFloatSwitch");
-#endif
-
-  if (debounce_toggle_switch(&float_switch, &float_switch_debounce, 10)) {
-#ifdef DEBUG
-    Serial.print("[");
-    Serial.print(micros());
-    Serial.print("] ");
-    Serial.println("handleFloatSwitch debounced ok");
-#endif
+  if (debounce_toggle_switch(&float_switch, &float_switch_debounce, 2)) {
     toggle_switch_read_state(&float_switch);
 
     if (toggle_switch_on(&float_switch)) {
-#ifdef DEBUG
-      Serial.print("[");
-      Serial.print(millis());
-      Serial.print("] ");
-      Serial.println("handleFloatSwitch is ON");
-#endif
-      if (toggle_switch_on(&button)) {
-        startSchedule();
-      }
+      BIT_SET(state_mask, FLOAT_SWITCH_BIT_POS);
     } else {
-#ifdef DEBUG
-      Serial.print("[");
-      Serial.print(millis());
-      Serial.print("] ");
-      Serial.println("handleFloatSwitch is OFF");
-#endif
-      stopSchedule();
+      BIT_UNSET(state_mask, FLOAT_SWITCH_BIT_POS);
     }
-  } else {
-#ifdef DEBUG
-    Serial.print("[");
-    Serial.print(micros());
-    Serial.print("] ");
-    Serial.println("handleFloatSwitch debounced NOT ok");
-#endif
   }
-}
-
-void startSchedule() {
-  water_schedule_start(&scheduler);
-  turnLedOn(OFF_SWITCH_LED_PIN);
-  Serial.println("Starting schedule");
-}
-
-void stopSchedule() {
-  water_schedule_stop(&scheduler);
-  turnLedOff(OFF_SWITCH_LED_PIN);
-  Serial.println("Stopping schedule.");
 }
 
 void loop() {
+  writeStateMaskToLeds();
 
-  if (!water_schedule_active(&scheduler)) {
-#ifdef DEBUG
-    Serial.print("[");
-    Serial.print(millis());
-    Serial.print("] ");
-    Serial.println("Waiting for scheduler to become active");
-#endif
-    waitForCondition(&(scheduler.state), HIGH);
-  }
-
-#ifdef DEBUG
-  Serial.print("[");
-  Serial.print(millis());
-  Serial.print("] ");
-  Serial.println("Starting pump");
-#endif
-
-  pump_start(&pump);
-  turnLedOn(PUMP_LED_PIN);
-
-#ifdef DEBUG
-  Serial.print("[");
-  Serial.print(millis());
-  Serial.print("] ");
-  Serial.print("Waiting ");
-  Serial.print(WATER_TIME);
-  Serial.println(" ms or until button is switched OFF");
-#endif
-
-  busyWaitOrCondition(WATER_TIME, &(scheduler.state), LOW);
-
-  pump_stop(&pump);
-  turnLedOff(PUMP_LED_PIN);
-
-#ifdef DEBUG
-  Serial.print("[");
-  Serial.print(millis());
-  Serial.print("] ");
-  Serial.println("Pumped stopped");
-#endif
-
-  /* check state once again, as it may have been turned off by the switch */
-  if (!water_schedule_active(&scheduler)) {
+  if (!BIT_IS_SET(state_mask, TOGGLE_SWITCH_BIT_POS) || !BIT_IS_SET(state_mask, FLOAT_SWITCH_BIT_POS)) {
+    if (BIT_IS_SET(state_mask, RELAY_BIT_POS)) {
+      digitalWrite(RELAY_PIN, LOW);
+      pump_state_msec = millis();
+      BIT_UNSET(state_mask, RELAY_BIT_POS);
+    }
     return;
   }
 
-#ifdef DEBUG
-  Serial.print("[");
-  Serial.print(millis());
-  Serial.print("] ");
-  Serial.print("Waiting ");
-  Serial.print(TIME_BETWEEN_WATERING);
-  Serial.println(" ms or until button is switched ON");
-#endif
+  if (!BIT_IS_SET(state_mask, RELAY_BIT_POS)) {
+    /* scheduler is active but pump is not running */
 
-  turnLedOn(WAIT_LED_PIN);
-  busyWaitOrCondition(TIME_BETWEEN_WATERING, &(scheduler.state), LOW);
-  turnLedOff(WAIT_LED_PIN);
+    if (pump_state_msec == 0 || ((millis() - pump_state_msec) > TIME_BETWEEN_WATERING)) {
+      digitalWrite(RELAY_PIN, HIGH);
+      pump_state_msec = millis();
+      BIT_SET(state_mask, RELAY_BIT_POS);
+    }
+    return;
+  }
 
-#ifdef DEBUG
-  Serial.print("[");
-  Serial.print(millis());
-  Serial.print("] ");
-  Serial.println("Done waiting");
-#endif
+  /* scheduler is active and pump is running */
+
+  if ((millis() - pump_state_msec) > WATER_TIME) {
+    digitalWrite(RELAY_PIN, LOW);
+    pump_state_msec = millis();
+    BIT_UNSET(state_mask, RELAY_BIT_POS);
+  }
 }
 
 void turnLedOn(int pin) {
@@ -240,4 +137,24 @@ void turnLedOff(int pin) {
  if (digitalRead(pin) == HIGH) {
   digitalWrite(pin, LOW);
  }
+}
+
+void writeStateMaskToLeds() {
+  if (BIT_IS_SET(state_mask, TOGGLE_SWITCH_BIT_POS)) {
+    turnLedOn(OFF_SWITCH_LED_PIN);
+  } else {
+    turnLedOff(OFF_SWITCH_LED_PIN);
+  }
+
+  if (BIT_IS_SET(state_mask, FLOAT_SWITCH_BIT_POS)) {
+    turnLedOn(FLOAT_SWITCH_LED_PIN);
+  } else {
+    turnLedOff(FLOAT_SWITCH_LED_PIN);
+  }
+
+  if (BIT_IS_SET(state_mask, RELAY_BIT_POS)) {
+    turnLedOn(PUMP_LED_PIN);
+  } else {
+    turnLedOff(PUMP_LED_PIN);
+  }
 }
