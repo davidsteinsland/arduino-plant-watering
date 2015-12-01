@@ -101,7 +101,7 @@ void loop() {
   if (!BIT_IS_SET(state_mask, TOGGLE_SWITCH_BIT_POS) || !BIT_IS_SET(state_mask, FLOAT_SWITCH_BIT_POS)) {
     if (BIT_IS_SET(state_mask, RELAY_BIT_POS)) {
       digitalWrite(RELAY_PIN, LOW);
-      pump_state_msec = millis();
+      pump_state_msec = 0;
       BIT_UNSET(state_mask, RELAY_BIT_POS);
     }
     return;
