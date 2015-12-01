@@ -60,14 +60,14 @@ void setup() {
 void handleToggleButton() {
 #ifdef DEBUG
   Serial.print("[");
-  Serial.print(millis());
+  Serial.print(micros());
   Serial.print("] ");
   Serial.println("handleToggleButton");
 #endif
-  if (debounce_toggle_switch(&button, &button_debounce, 1)) {
+  if (debounce_toggle_switch(&button, &button_debounce, 10)) {
 #ifdef DEBUG
     Serial.print("[");
-    Serial.print(millis());
+    Serial.print(micros());
     Serial.print("] ");
     Serial.println("handleToggleButton debounced ok");
 #endif
@@ -92,6 +92,13 @@ void handleToggleButton() {
 #endif
       stopSchedule();
     }
+  } else {
+#ifdef DEBUG
+    Serial.print("[");
+    Serial.print(micros());
+    Serial.print("] ");
+    Serial.println("handleToggleButton debounced NOT ok");
+#endif
   }
 }
 
@@ -99,15 +106,15 @@ void handleFloatSwitch() {
 
 #ifdef DEBUG
   Serial.print("[");
-  Serial.print(millis());
+  Serial.print(micros());
   Serial.print("] ");
   Serial.println("handleFloatSwitch");
 #endif
 
-  if (debounce_toggle_switch(&float_switch, &float_switch_debounce, 1)) {
+  if (debounce_toggle_switch(&float_switch, &float_switch_debounce, 10)) {
 #ifdef DEBUG
     Serial.print("[");
-    Serial.print(millis());
+    Serial.print(micros());
     Serial.print("] ");
     Serial.println("handleFloatSwitch debounced ok");
 #endif
@@ -132,6 +139,13 @@ void handleFloatSwitch() {
 #endif
       stopSchedule();
     }
+  } else {
+#ifdef DEBUG
+    Serial.print("[");
+    Serial.print(micros());
+    Serial.print("] ");
+    Serial.println("handleFloatSwitch debounced NOT ok");
+#endif
   }
 }
 
