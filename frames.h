@@ -40,6 +40,9 @@ uint8_t frame2_state = 0;
 unsigned long frame2_blink_time = 0;
 uint8_t frame2_blink_state = 0;
 
+uint8_t frame3_state = 0,
+  frame3_pump_runtime = 0;
+
 void frame0_draw_alarm1() {
   lcd_clear_row(ROWS - 1, 8);
   lcd_print_two_digit(hour(current_time));
@@ -96,7 +99,7 @@ void frame0() {
   int8_t btn = button_handle();
 
   if (btn == 0) {
-    switch_frame(0);
+    switch_frame(FRAME_3);
   } else if (btn == 1) {
     switch_frame(FRAME_1);
   } else if (btn == 2) {
@@ -257,6 +260,45 @@ void frame2() {
         int8_t btn = button_handle();
         if (btn == 2) {
           switch_frame(FRAME_0);
+        }
+      }
+    break;
+  }
+}
+
+void frame3_draw() {
+  frame3_state = PUMP_SET_TIME;
+  frame3_pump_runtime = (uint8_t)(get_pump_runtime() / 1000);
+
+  lcd_clear_row(0);
+  lcd.print("Set pump runtime");
+  lcd_clear_row(1);
+  lcd_print_two_digit(frame3_pump_runtime);
+  lcd.print(" seconds");
+}
+
+void frame3() {
+  if (frame_needs_redraw()) {
+    frame3_draw();
+  }
+
+  switch (frame3_state) {
+    case PUMP_SET_TIME:
+      frame_blink_text(&frame2_blink_time, &frame2_blink_state, frame3_pump_runtime, 0, 1);
+      frame_button_handle(&frame3_pump_runtime, (uint8_t)(WATER_MIN_RUNTIME/1000), (uint8_t)(WATER_MAX_RUNTIME/1000), 0, 1, &frame3_state, PUMP_TIME_CONFIRM);
+    break;
+
+    case PUMP_TIME_CONFIRM:
+    {
+        int8_t btn = button_handle();
+        // CANCEL
+        if (btn == 0 || btn == 1) {
+          switch_frame(FRAME_0);
+          return;
+        } else if (btn == 2) {
+          // CONFIRM
+          set_pump_runtime((uint16_t)(frame3_pump_runtime * 1000));
+          switch_frame(0);
         }
       }
     break;

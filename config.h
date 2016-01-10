@@ -29,6 +29,7 @@ LiquidCrystal::LiquidCrystal(uint8_t rs, uint8_t enable,
 #define FRAME_0 0
 #define FRAME_1 1
 #define FRAME_2 2
+#define FRAME_3 3
 
 #define TIMER_STATE_SCHEDULE 0
 #define TIMER_STATE_HOUR 1
@@ -37,16 +38,24 @@ LiquidCrystal::LiquidCrystal(uint8_t rs, uint8_t enable,
 #define TIMER_STATE_CONFIRM 4
 #define TIMER_STATE_SET 5
 
+#define PUMP_SET_TIME 0
+#define PUMP_TIME_CONFIRM 1
+
 #define FLOAT_SWITCH_ON 0
 #define FLOAT_SWITCH_OFF 1
 
+#define WATER_MIN_RUNTIME 1000
+#define WATER_MAX_RUNTIME 10000
 #define WATER_RUNTIME 5000
+
+
 #define PUMP_OFF 0
 #define PUMP_ON 1
 
 typedef struct {
   uint8_t state;
   unsigned long state_start;
+  uint16_t runtime;
   uint16_t count;
 } pump_t;
 
@@ -72,6 +81,8 @@ alarm_t alarm2_def;
 void pump_on();
 void pump_off();
 uint16_t get_pump_count();
+uint16_t get_pump_runtime();
+void set_pump_runtime(uint16_t);
 
 
 #endif

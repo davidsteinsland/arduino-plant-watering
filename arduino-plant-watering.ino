@@ -12,7 +12,12 @@
 #include "frames.h"
 #include "busy_wait.h"
 
-pump_t pump = {.state = PUMP_OFF, .state_start = 0, .count = 0};
+pump_t pump = {
+  .state = PUMP_OFF,
+  .state_start = 0,
+  .runtime = WATER_RUNTIME,
+  .count = 0
+};
 
 void setup() {
   uint8_t arrow[8] = {
@@ -118,6 +123,14 @@ uint16_t get_pump_count() {
   return pump.count;
 }
 
+uint16_t get_pump_runtime() {
+  return pump.runtime;
+}
+
+void set_pump_runtime(uint16_t runtime) {
+  pump.runtime = runtime;
+}
+
 /*
   RTC Alarm ISR
  */
@@ -154,7 +167,7 @@ void watchdog_init(uint8_t mask) {
   Watchdog ISR
  */
 ISR(WDT_vect) {
-  if ((millis() - pump.state_start) >= WATER_RUNTIME) {
+  if ((millis() - pump.state_start) >= pump.runtime) {
     pump_off();
   }
 }
@@ -185,6 +198,10 @@ void loop() {
     case FRAME_2:
       /* menu option frame */
       frame2();
+      break;
+
+    case FRAME_3:
+      frame3();
       break;
   }
 
